@@ -1,0 +1,164 @@
+# omarchy-mihomo: mihomo config rendered from config/config.template.yaml.
+# (marker: managed-by-omarchy-mihomo)
+# Placeholders: __SUBSCRIPTION_URL__, __SECRET__, __TUN_ENABLE__.
+# Edit the template, not the rendered copy: the installer overwrites it.
+
+mixed-port: 7890
+allow-lan: false
+bind-address: 127.0.0.1
+mode: rule
+log-level: info
+ipv6: true
+unified-delay: true
+tcp-concurrent: true
+find-process-mode: strict
+
+external-controller: 127.0.0.1:9090
+secret: "__SECRET__"
+# Web dashboard for debugging: http://127.0.0.1:9090/ui
+external-ui: ui
+external-ui-url: https://github.com/Zephyruso/zashboard/releases/latest/download/dist.zip
+
+profile:
+  store-selected: true   # remember the chosen node across restarts
+  store-fake-ip: true
+
+# Subscription: Remnawave (or any panel) serving Clash YAML. Only its
+# `proxies:` list is used; groups and rules below are ours.
+proxy-providers:
+  subscription:
+    type: http
+    url: "__SUBSCRIPTION_URL__"
+    path: ./providers/subscription.yaml
+    interval: 3600
+    health-check:
+      enable: true
+      url: https://www.gstatic.com/generate_204
+      interval: 300
+      lazy: true
+
+proxy-groups:
+  # The group the bar panel switches. "Auto" picks the fastest node.
+  - name: VPN
+    type: select
+    proxies: [Auto]
+    use: [subscription]
+  - name: Auto
+    type: url-test
+    use: [subscription]
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+    tolerance: 50
+    lazy: true
+  # Where Russian traffic goes. DIRECT = "RU direct" routing,
+  # VPN = everything through the VPN. The panel switches it.
+  - name: RU
+    type: select
+    proxies: [DIRECT, VPN]
+
+# Lists are maintained upstream and refreshed daily by mihomo itself.
+rule-providers:
+  # Domains blocked in Russia or blocking Russian users:
+  # itdoginfo/allow-domains + no-russia-hosts + antifilter community.
+  ru-blocked:
+    type: http
+    behavior: domain
+    format: mrs
+    url: https://github.com/legiz-ru/mihomo-rule-sets/raw/main/ru-bundle/rule.mrs
+    path: ./rules/ru-blocked.mrs
+    interval: 86400
+  # Russian services (v2fly domain-list-community, category-ru).
+  ru-domains:
+    type: http
+    behavior: domain
+    format: mrs
+    url: https://github.com/MetaCubeX/meta-rules-dat/raw/meta/geo/geosite/category-ru.mrs
+    path: ./rules/ru-domains.mrs
+    interval: 86400
+  # Russian IP ranges.
+  ru-ips:
+    type: http
+    behavior: ipcidr
+    format: mrs
+    url: https://github.com/MetaCubeX/meta-rules-dat/raw/meta/geo/geoip/ru.mrs
+    path: ./rules/ru-ips.mrs
+    interval: 86400
+
+# First match wins. Local networks always stay direct; Russian traffic
+# follows the RU group; sites blocked in Russia always use the VPN.
+rules:
+  - DOMAIN-SUFFIX,local,DIRECT
+  - DOMAIN-SUFFIX,lan,DIRECT
+  - IP-CIDR,127.0.0.0/8,DIRECT,no-resolve
+  - IP-CIDR,10.0.0.0/8,DIRECT,no-resolve
+  - IP-CIDR,172.16.0.0/12,DIRECT,no-resolve
+  - IP-CIDR,192.168.0.0/16,DIRECT,no-resolve
+  - IP-CIDR,100.64.0.0/10,DIRECT,no-resolve
+  - IP-CIDR,169.254.0.0/16,DIRECT,no-resolve
+  - IP-CIDR6,fc00::/7,DIRECT,no-resolve
+  - IP-CIDR6,fe80::/10,DIRECT,no-resolve
+  - RULE-SET,ru-blocked,VPN
+  - DOMAIN-SUFFIX,ru,RU
+  - DOMAIN-SUFFIX,su,RU
+  - DOMAIN-SUFFIX,xn--p1ai,RU
+  - DOMAIN-SUFFIX,xn--p1acf,RU
+  - RULE-SET,ru-domains,RU
+  - RULE-SET,ru-ips,RU
+  - MATCH,VPN
+
+sniffer:
+  enable: true
+  force-dns-mapping: true
+  parse-pure-ip: true
+  sniff:
+    HTTP:
+      ports: [80, 8080-8880]
+      override-destination: true
+    TLS:
+      ports: [443, 8443]
+    QUIC:
+      ports: [443, 8443]
+
+dns:
+  enable: true
+  listen: 127.0.0.1:1053
+  ipv6: true
+  enhanced-mode: fake-ip
+  fake-ip-range: 198.18.0.1/16
+  fake-ip-filter:
+    - "+.lan"
+    - "+.local"
+    - "+.ts.net"
+    - "time.*.com"
+    - "ntp.*.com"
+    - "+.pool.ntp.org"
+    - "+.msftconnecttest.com"
+    - "+.msftncsi.com"
+    - "stun.*.*"
+    - "stun.*.*.*"
+  # DNS queries follow the rules above: Russian names resolve directly
+  # (and get Russian CDN answers), the rest goes through the VPN.
+  respect-rules: true
+  default-nameserver: [77.88.8.8, 1.1.1.1]
+  proxy-server-nameserver: [77.88.8.8, 1.1.1.1]
+  nameserver:
+    - https://1.1.1.1/dns-query
+    - https://dns.google/dns-query
+  nameserver-policy:
+    "+.ru,+.su,+.xn--p1ai,+.xn--p1acf,rule-set:ru-domains":
+      - https://common.dot.dns.yandex.net/dns-query
+      - 77.88.8.8
+
+# The panel switches tun.enable at runtime and restores the last state when
+# the shell starts, so the value here is only the boot default.
+# gvisor keeps the whole TCP/IP stack in userspace: with "system"/"mixed"
+# stacks or auto-redirect, new connections pass the INPUT chain, which a
+# default-drop firewall such as ufw silently drops.
+tun:
+  enable: __TUN_ENABLE__
+  stack: gvisor
+  auto-route: true
+  auto-redirect: false
+  auto-detect-interface: true
+  strict-route: true
+  dns-hijack: [any:53, tcp://any:53]

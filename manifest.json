@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 1,
+  "id": "aintnewtathis.mihomo",
+  "name": "mihomo VPN",
+  "version": "0.1.0",
+  "author": "aintnewtathis",
+  "license": "MIT",
+  "description": "Turn a mihomo (Clash.Meta) VPN on and off, pick a server, and switch routing from the Omarchy bar.",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "Panel.qml"
+  },
+  "barWidget": {
+    "displayName": "mihomo VPN",
+    "description": "VPN switch, server picker with latency, RU-direct routing toggle and live traffic for a mihomo core.",
+    "category": "Network",
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "refreshIntervalSec": 5,
+      "showLabel": false,
+      "language": "auto"
+    },
+    "schema": [
+      {
+        "key": "refreshIntervalSec",
+        "type": "integer",
+        "label": "Refresh interval (seconds)",
+        "min": 2,
+        "max": 600,
+        "step": 1,
+        "defaultValue": 5
+      },
+      {
+        "key": "showLabel",
+        "type": "boolean",
+        "label": "Show the server next to the icon",
+        "defaultValue": false
+      },
+      {
+        "key": "language",
+        "type": "enum",
+        "label": "Language",
+        "options": ["auto", "en", "ru"],
+        "defaultValue": "auto"
+      },
+      {
+        "key": "controllerFile",
+        "type": "string",
+        "label": "Controller file (url + secret JSON)",
+        "defaultValue": ""
+      }
+    ]
+  }
+}
